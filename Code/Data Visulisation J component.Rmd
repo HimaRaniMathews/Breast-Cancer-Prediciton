@@ -1,0 +1,586 @@
+---
+title: "Breast Cancer Prediction"
+author: 
+-  Hima Rani Mathews - 19BCE1532
+-  Kamalika Gunasekaran - 19BCE1588 
+output: html_document
+---
+
+### Introduction
+### The dataset  
+
+[The Breast Cancer (Wisconsin) Diagnosis dataset](https://www.rstudio.com) contains the diagnosis and a set of 30  features describing the characteristics of the cell nuclei present in the digitized image of a of a fine needle aspirate (FNA) of a breast mass.
+
+Ten real-valued features are computed for each cell nucleus:  
+
++ radius (mean of distances from center to points on the perimeter);  
++ texture (standard deviation of gray-scale values);  
++ perimeter;  
++ area;  
++ smoothness (local variation in radius lengths);  
++ compactness (perimeter^2 / area - 1.0);  
++ concavity (severity of concave portions of the contour);  
++ concave points (number of concave portions of the contour);  
++ symmetry;  
++ fractal dimension ("coastline approximation" - 1).
+
+
+The mean, standard error (SE) and "worst" or largest (mean of the three largest values) of these features were computed for each image, resulting in 30 features.
+We will analyze the features to understand the predictive value for diagnosis. We will then create models using two different algorithms and use the models to predict the diagnosis.
+
+```{r, echo=TRUE}
+suppressMessages(library(ggplot2))
+suppressMessages(library(GGally))
+suppressMessages(library(dplyr))
+suppressMessages(library(DataExplorer))
+suppressMessages(library(funModeling))
+```
+
+### 1) IMPORTING DATASET
+```{r, echo=TRUE}
+wbcd <- read.csv("data.csv")
+head(wbcd,10)
+dim(wbcd)
+str(wbcd)
+```
+
+### 2) DATA CLEANING & PRE-PROCESSING
+
+
+
+#### Distribution of different attributes
+```{r}
+plot_num(wbcd %>% select(-id), bins=10)
+
+```
+
+```{r, echo=TRUE}
+wbcd$X <- NULL
+wbcd <- wbcd[,-1]
+wbcd$diagnosis <- factor(ifelse(wbcd$diagnosis=="B","Benign","Malignant"))
+head(wbcd,10)
+summary(wbcd)
+wbcd %>% plot_missing()
+```
+
+
+
+### 3) VISUALIZATIONS
+
+#### Malignant and Benign diagnosis barplot
+```{r}
+#Insight into Breast Cancer Wisconsin- Data
+ggplot(data = wbcd, aes(x = diagnosis, fill = diagnosis)) +
+geom_bar()+
+geom_text(stat='count', aes(label=..count..), vjust=-1) +
+labs(title = 'Diagnosis of Breast Cancer',
+     subtitle = 'Most of the diagnosis (63%) are Benign',
+     caption = 'Data owned by the University of Wisconsin',
+     x = 'Diagnosis', y = 'Number of observations')
+```
+
+
+#### Scatterplot
+#### Mean Perimeter and Mean Radius
+Over here, we will be using the mean perimeter and the mean radius observed from the center of the lump to the perimeter. This will reveal how both types of lumps look in relative size.
+
+
+```{r}
+ggplot(data = wbcd, 
+       aes(x = radius_mean, y = perimeter_mean, color = diagnosis)) +
+  geom_point() +
+  geom_hline(yintercept = 116.0, linetype = 'dashed', color = 'gray')+
+  geom_vline(xintercept = 18.00, linetype = 'dashed', color = 'gray')+
+  labs(title = 'Mean Perimeter and Mean Radius',
+       subtitle = 'Malignant lumps can get relatively bigger than benigns',
+       caption = 'Data owned by the University of Wisconsin',
+       x = 'Mean Radius', y = 'Mean Perimeter') +
+  annotate('text', x = 24, y = 150, 
+           label = '45% of malignants are bigger than every observed benign',
+           size = 2.3, angle = 45)
+```
+
+<strong>Insights</strong>:
+Malignant lumps can get relatively bigger than benign lumps. This has the possibility of sparking up a hypothesis that malignant lumps begin as benigns.
+
+#### Mean Texture and Smoothess of Lumps
+```{r, echo=TRUE}
+ggplot(data = wbcd, 
+       aes(x = texture_mean, y = smoothness_mean, color = diagnosis)) +
+  geom_point()+
+  geom_vline(xintercept =  18.84, linetype = 'dashed', color = 'gray') +
+  labs(title = 'Mean Texture and Smoothess of Lumps',
+       subtitle = 'Most benigns (66%) are below the median mean texture',
+       caption = 'Data owned by the University of Wisconsin',
+       x = 'Mean Texture', y = 'Mean Smoothness') +
+  annotate('text', label = 'median = 18.84', x = 22, y = 0.160,
+           size = 2.5)
+```
+
+<strong>Insights from Texture and Smoothness Visualization</strong>
+
+Not a lot of variation can be seen in the mean smoothness of both diagnosis as they all seem to clustered from the bottom to the upper midsection of the plot. However we can observe that most of the malignants (66%) are skewed to the right side of the median. This connotes that malignant lumps display higher texture variation values than benigns.
+
+#### Compactness and Concavity
+```{r, echo=TRUE}
+ggplot(data = wbcd, 
+       aes(x = compactness_mean, y = concavity_mean, color = diagnosis)) +
+  geom_point()+
+  geom_smooth() +
+  labs(title = 'Mean Compactness and Mean Concavity',
+       subtitle = 'Most benigns display less concavity and compactness',
+       caption = 'Data owned by the University of Wisconsin',
+       x = 'Mean Compactness', y = 'Mean Concavity')
+```
+
+<strong>Insight from Compactness and Concavity</strong>
+
+There is a clear display of outliers within the data. However a visual analysis reveals that benign lumps tend to have low mean concavity and a low mean compactness. This can is manifested in the benigns being skewed towards the bottom left side of the graph. Notice that the malignants are displaying a wider range from low concavity and low compactness to high concavity and high compactness.
+This visualization suggests that benigns usually have low to medium severe concaves at the contours of the lumps however malignant lumps can display anywhere between low and very high concavity and compactness.
+
+
+
+
+### 4) ANALYSING THE CORRELATION B/W VARIABLES
+#### Correlation between each variables
+
+#### (a)MEAN
+```{r}
+ggpairs(wbcd[,c(2:11)],)+ theme_bw()+
+labs(title="Cancer Worst")+
+theme(plot.title=element_text(face='bold',color='black',hjust=0.5,size=13))
+```
+#### (b)STANDARD ERROR
+```{r}
+ggpairs(wbcd[,c(12:21)],)+ theme_bw()+
+labs(title="Cancer Worst")+
+theme(plot.title=element_text(face='bold',color='black',hjust=0.5,size=13))
+```
+
+#### (c)WORST
+```{r}
+ggpairs(wbcd[,c(22:31)],)+ theme_bw()+
+labs(title="Cancer Worst")+
+theme(plot.title=element_text(face='bold',color='black',hjust=0.5,size=13))
+```
+
+#### <strong>Viewing correlation between different variables using ggcorr funtion</strong>
+
+#### (a) MEAN
+```{r, echo=TRUE}
+ggcorr(wbcd[,c(2:11)], name = "corr", label = TRUE)+
+  theme(legend.position="none")+
+labs(title="Cancer Mean")+
+theme(plot.title=element_text(face='bold',color='black',hjust=0.5,size=12))
+```
+
+#### (b)STANDARD ERROR
+```{r, echo=TRUE}
+ggcorr(wbcd[,c(12:21)], name = "corr", label = TRUE)+
+  theme(legend.position="none")+
+labs(title="Cancer SE")+
+theme(plot.title=element_text(face='bold',color='black',hjust=0.5,size=12))
+```
+
+#### (c)WORST
+```{r, echo=TRUE}
+ggcorr(wbcd[,c(22:31)], name = "corr", label = TRUE)+
+  theme(legend.position="none")+
+labs(title="Cancer Worst")+
+theme(plot.title=element_text(face='bold',color='black',hjust=0.5,size=12))
+```
+
+### 5)PRINCIPAL COMPONENT ANALYSIS (PCA) 
+```{r, echo=TRUE}
+library(factoextra)
+wbcd_pca <- transform(wbcd) 
+```
+#### All
+The cumulative proportion from PC1 to PC6 is about 88.7%. (above 85%)
+It means that PC1~PC6 can explain 88.7% of the whole data.
+```{r, echo=TRUE}
+all_pca <- prcomp(wbcd_pca[,-1], cor=TRUE, scale = TRUE)
+summary(all_pca)
+```
+
+#### Mean
+The cumulative proportion from PC1 to PC3 is about 88.7%. (above 85%)
+```{r, echo=TRUE}
+mean_pca <- prcomp(wbcd_pca[,c(2:11)], scale = TRUE)
+summary(mean_pca)
+```
+
+#### SE
+The cumulative proportion from PC1 to PC4 is about 86.7%. (above 85%)
+```{r, echo=TRUE}
+se_pca <- prcomp(wbcd_pca[,c(12:21)], scale = TRUE)
+summary(se_pca)
+```
+
+#### Worst
+The cumulative proportion from PC1 to PC3 is about 85.8%. (above 85%)
+```{r, echo=TRUE}
+worst_pca <- prcomp(wbcd_pca[,c(22:31)], scale = TRUE)
+summary(worst_pca)
+```
+### SCREE PLOTS
+
+#### All
+Line lies at point PC6
+```{r}
+screeplot(all_pca, type = "l", npcs = 15, main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+
+
+fviz_eig(all_pca, addlabels=TRUE, ylim=c(0,60), geom = c("bar", "line"), barfill = "pink", barcolor="grey",linecolor = "red", ncp=10)+
+labs(title = "Cancer All Variances - PCA",
+         x = "Principal Components", y = "% of variances")
+```
+
+#### Mean
+Line lies at point PC4
+```{r, echo=TRUE}
+screeplot(mean_pca, type = "l", npcs = 15, main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+fviz_eig(mean_pca, addlabels=TRUE, ylim=c(0,60), geom = c("bar", "line"), barfill = "pink", barcolor="grey",linecolor = "red", ncp=10)+
+labs(title = "Cancer Mean Variances - PCA",
+         x = "Principal Components", y = "% of variances")
+```
+
+#### Standard Error
+Line lies at point PC4
+```{r, echo=TRUE}
+screeplot(se_pca, type = "l", npcs = 15, main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+fviz_eig(se_pca, addlabels=TRUE, ylim=c(0,60), geom = c("bar", "line"), barfill = "pink", barcolor="grey",linecolor = "red", ncp=10)+
+labs(title = "Cancer SE Variances - PCA",
+         x = "Principal Components", y = "% of variances")
+```
+
+#### Worst
+Line lies at point PC4
+```{r, echo=TRUE}
+screeplot(worst_pca, type = "l", npcs = 15, main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+fviz_eig(worst_pca, addlabels=TRUE, ylim=c(0,60), geom = c("bar", "line"), barfill = "pink", barcolor="grey",linecolor = "red", ncp=10)+
+labs(title = "Cancer Worst Variances - PCA",
+         x = "Principal Components", y = "% of variances")
+```
+
+### GET PCA VARIABLES
+```{r, echo=TRUE}
+all_var <- get_pca_var(all_pca)
+all_var
+```
+##### Quality of representation of PCA
+Correlation between variables and PCA
+```{r}
+library("corrplot")
+corrplot(all_var$cos2, is.corr=FALSE)
+```
+
+##### Contributions of variables to PCA
+To highlight the most contributing variables for each components
+```{r}
+corrplot(all_var$contrib, is.corr=FALSE)	
+```
+
+##### Contributions of variables to PC1 & PC2
+```{r}
+library(gridExtra)
+p1 <- fviz_contrib(all_pca, choice="var", axes=1, fill="pink", color="grey", top=10)
+p2 <- fviz_contrib(all_pca, choice="var", axes=2, fill="skyblue", color="grey", top=10)
+grid.arrange(p1,p2,ncol=2)
+```
+
+
+#### Mean
+##### Get PCA Variables
+```{r}
+mean_var <- get_pca_var(mean_pca)
+mean_var
+```
+
+##### Quality of representation of PCA
+Correlation between variables and PCA
+```{r}
+library("corrplot")
+corrplot(mean_var$cos2, is.corr=FALSE)
+```
+
+##### Contributions of variables to PCA
+To highlight the most contributing variables for each components
+```{r}
+corrplot(mean_var$contrib, is.corr=FALSE)	
+```
+
+##### Contributions of variables to PC1 & PC2
+```{r}
+library(gridExtra)
+p1 <- fviz_contrib(mean_pca, choice="var", axes=1, fill="pink", color="grey", top=10)
+p2 <- fviz_contrib(mean_pca, choice="var", axes=2, fill="skyblue", color="grey", top=10)
+grid.arrange(p1,p2,ncol=2)
+```
+
+#### SE
+##### Get PCA Variables
+```{r}
+se_var <- get_pca_var(se_pca)
+se_var
+```
+
+##### Quality of representation of PCA
+Correlation between variables and PCA
+```{r}
+library("corrplot")
+corrplot(se_var$cos2, is.corr=FALSE)
+```
+
+##### Contributions of variables to PCA
+To highlight the most contributing variables for each components
+```{r}
+corrplot(se_var$contrib, is.corr=FALSE)	
+```
+
+##### Contributions of variables to PC1 & PC2
+```{r}
+library(gridExtra)
+p1 <- fviz_contrib(se_pca, choice="var", axes=1, fill="pink", color="grey", top=10)
+p2 <- fviz_contrib(se_pca, choice="var", axes=2, fill="skyblue", color="grey", top=10)
+grid.arrange(p1,p2,ncol=2)
+```
+
+#### Worst
+##### Get PCA Variables
+```{r}
+worst_var <- get_pca_var(worst_pca)
+worst_var
+```
+
+##### Quality of representation of PCA
+Correlation between variables and PCA
+```{r}
+library("corrplot")
+corrplot(worst_var$cos2, is.corr=FALSE)
+```
+
+##### Contributions of variables to PCA
+To highlight the most contributing variables for each components
+```{r}
+corrplot(worst_var$contrib, is.corr=FALSE)	
+```
+
+##### Contributions of variables to PC1 & PC2
+```{r}
+library(gridExtra)
+p1 <- fviz_contrib(worst_pca, choice="var", axes=1, fill="pink", color="grey", top=10)
+p2 <- fviz_contrib(worst_pca, choice="var", axes=2, fill="skyblue", color="grey", top=10)
+grid.arrange(p1,p2,ncol=2)
+```
+
+
+
+### BIPLOTS
+#### All
+```{r, echo=TRUE}
+fviz_pca_biplot(all_pca, col.ind = wbcd$diagnosis, col="black",
+                palette = "jco", geom = "point", repel=TRUE,
+                legend.title="Diagnosis", addEllipses = TRUE)
+```
+
+#### Mean
+```{r, echo=TRUE}
+fviz_pca_biplot(mean_pca, col.ind = wbcd$diagnosis, col="black",
+                palette = "jco", geom = "point", repel=TRUE,
+                legend.title="Diagnosis", addEllipses = TRUE)
+```
+
+
+#### SE
+```{r, echo=TRUE}
+fviz_pca_biplot(se_pca, col.ind = wbcd$diagnosis, col="black",
+                palette = "jco", geom = "point", repel=TRUE,
+                legend.title="Diagnosis", addEllipses = TRUE)
+```
+
+#### Worst
+```{r, echo=TRUE}
+fviz_pca_biplot(worst_pca, col.ind = wbcd$diagnosis, col="black",
+                palette = "jco", geom = "point", repel=TRUE,
+                legend.title="Diagnosis", addEllipses = TRUE)
+```
+
+### 6)MODEL BUILDING
+test & train dataset for testing classification ML methods
+train dataset(70%), test dataset(30%)
+```{r, echo=TRUE}
+nrows <- NROW(wbcd)
+set.seed(218)                           ## fix random value
+index <- sample(1:nrows, 0.7 * nrows)   ## shuffle and divide
+
+#train <- wbcd                          ## 569 test data (100%)
+train <- wbcd[index,]                   ## 398 test data (70%)
+test <- wbcd[-index,]                   ## 171 test data (30%)
+
+prop.table(table(train$diagnosis)) #proportion of diagnosis (Benign / Malignant) 
+prop.table(table(test$diagnosis))
+```
+
+### APPLYING ML MODELS
+
+#### naiveBayes
+```{r, echo=TRUE}
+library(caret)
+library(e1071)
+
+learn_nb <- naiveBayes(train[,-1], train$diagnosis)
+pre_nb <- predict(learn_nb, test[,-1])
+cm_nb <- confusionMatrix(pre_nb, test$diagnosis)        
+cm_nb
+```
+
+#### randomForest
+```{r, echo=TRUE}
+library(randomForest)
+learn_rf <- randomForest(diagnosis~., data=train, ntree=500, proximity=T, importance=T)
+pre_rf   <- predict(learn_rf, test[,-1])
+cm_rf    <- confusionMatrix(pre_rf, test$diagnosis)
+cm_rf
+```
+
+#### rpart
+```{r, echo=TRUE}
+library(rpart)
+learn_rp <- rpart(diagnosis~.,data=train,control=rpart.control(minsplit=2))
+pre_rp <- predict(learn_rp, test[,-1], type="class")
+cm_rp  <- confusionMatrix(pre_rp, test$diagnosis)   
+cm_rp
+```
+#### AdaBoost
+```{r, echo=TRUE}
+library(rpart)
+library(ada)
+control <- rpart.control(cp = -1, maxdepth = 14,maxcompete = 1,xval = 0)
+learn_ada <- ada(diagnosis~., data = train, test.x = train[,-1], test.y = train[,1], type = "gentle", control = control, iter = 70)
+pre_ada <- predict(learn_ada, test[,-1])
+cm_ada <- confusionMatrix(pre_ada, test$diagnosis)
+cm_ada
+```
+
+#### SVM
+```{r, echo=TRUE}
+learn_svm <- svm(diagnosis~., data=train)
+pre_svm <- predict(learn_svm, test[,-1])
+cm_svm <- confusionMatrix(pre_svm, test$diagnosis)
+cm_svm
+```
+
+#### SVM-Tune
+```{r, echo=TRUE}
+gamma <- seq(0,0.1,0.005)
+cost <- 2^(0:5)
+parms <- expand.grid(cost=cost, gamma=gamma)    ## 231
+
+acc_test <- numeric()
+accuracy1 <- NULL; accuracy2 <- NULL
+
+for(i in 1:NROW(parms)){        
+        learn_svm <- svm(diagnosis~., data=train, gamma=parms$gamma[i], cost=parms$cost[i])
+        pre_svm <- predict(learn_svm, test[,-1])
+        accuracy1 <- confusionMatrix(pre_svm, test$diagnosis)
+        accuracy2[i] <- accuracy1$overall[1]
+}
+
+acc <- data.frame(p= seq(1,NROW(parms)), cnt = accuracy2)
+
+opt_p <- subset(acc, cnt==max(cnt))[1,]
+sub <- paste("Optimal number of parameter is", opt_p$p, "(accuracy :", opt_p$cnt,") in SVM")
+
+library(highcharter)
+hchart(acc, 'line', hcaes(p, cnt)) %>%
+  hc_title(text = "Accuracy With Varying Parameters (SVM)") %>%
+  hc_subtitle(text = sub) %>%
+  hc_add_theme(hc_theme_google()) %>%
+  hc_xAxis(title = list(text = "Number of Parameters")) %>%
+  hc_yAxis(title = list(text = "Accuracy"))
+learn_imp_svm <- svm(diagnosis~., data=train, cost=parms$cost[opt_p$p], gamma=parms$gamma[opt_p$p])
+pre_imp_svm <- predict(learn_imp_svm, test[,-1])
+cm_imp_svm <- confusionMatrix(pre_imp_svm, test$diagnosis)
+cm_imp_svm
+```
+##### Prediction Plot
+```{r, echo=TRUE}
+col <- c("#ed3b3b", "#0099ff")
+par(mfrow=c(2,3))
+fourfoldplot(cm_nb$table, color = col, conf.level = 0, margin = 1, main=paste("NaiveBayes (",round(cm_nb$overall[1]*100),"%)",sep=""))
+fourfoldplot(cm_rp$table, color = col, conf.level = 0, margin = 1, main=paste("RPart (",round(cm_rp$overall[1]*100),"%)",sep=""))
+fourfoldplot(cm_rf$table, color = col, conf.level = 0, margin = 1, main=paste("RandomForest (",round(cm_rf$overall[1]*100),"%)",sep=""))
+fourfoldplot(cm_ada$table, color = col, conf.level = 0, margin = 1, main=paste("AdaBoost (",round(cm_ada$overall[1]*100),"%)",sep=""))
+fourfoldplot(cm_svm$table, color = col, conf.level = 0, margin = 1, main=paste("SVM (",round(cm_svm$overall[1]*100),"%)",sep=""))
+fourfoldplot(cm_imp_svm$table, color = col, conf.level = 0, margin = 1, main=paste("Tune SVM (",round(cm_imp_svm$overall[1]*100),"%)",sep=""))
+
+```
+
+#### Select a best prediction model according to high accuracy
+```{r, echo=TRUE}
+opt_predict <- c( cm_nb$overall[1],  cm_rp$overall[1],cm_rf$overall[1],cm_ada$overall[1],cm_svm$overall[1],cm_imp_svm$overall[1])
+names(opt_predict) <- c("Naive Bayes","RPart","Random Forest","AdaBoost","SVM","SVM Tune")
+best_predict_model <- subset(opt_predict, opt_predict==max(opt_predict))
+best_predict_model
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
+
+```{r, echo=TRUE}
+
+```
